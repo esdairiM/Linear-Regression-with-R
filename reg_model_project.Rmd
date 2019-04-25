@@ -1,11 +1,12 @@
 ---
 title: "Modeling and prediction for movies"
 author: "Mohamed ESDAIRI"
-output: 
-  html_document: 
+output:
+  html_document:
     fig_height: 4
     highlight: pygments
     theme: spacelab
+  pdf_document: default
 ---
 
 ## Setup
@@ -54,23 +55,25 @@ How can we describe the **association** of following variables:
 * best_actor_win, 
 * best_actress_win, 
 * best_dir_win, 
-* runtime,
+* run-time,
 
 with how the audience will react to a movie? 
 
 can we fit a regression model with all or a subset of those variables to accurately describe this association?
 
-this is a very instersting question to answer since we can predict how good is a movie well ahead of time.
+this is a very interesting question to answer since we can predict how good is a movie well ahead of time.
 
 * * *
 
 ## Part 3: Exploratory data analysis
 First lets extract all the variables of interest from the data-set:
-how well the audience is reacting to a movie will be calcualte as the average between IMDB ratting and Rotten Tomtoes score after rescaling the variables.
+how well the audience is reacting to a movie will be calculate as the average between IMDB ratting and Rotten Tomatoes score after re-scaling the variables.
 
 ```{r}
 movies %>%
-select(genre, runtime, critics_score, imdb_rating,  audience_score, best_actor_win, best_actress_win, best_dir_win) %>%
+select(genre, runtime, critics_score, 
+       imdb_rating,  audience_score, 
+       best_actor_win, best_actress_win, best_dir_win) %>%
 na.omit() %>%
 mutate(movie_rating= (audience_score/20)+(imdb_rating/2)) %>%
 select(-c(audience_score, imdb_rating)) ->
@@ -80,7 +83,7 @@ str(refined_data_set)
 ```
 ### 3.1: EDA for categroical variables:
 
-Lets look at the distribution of observations accross categrorical variables:
+Lets look at the distribution of observations across categorical variables:
 we will begin by looking at counts:
 ```{r}
 count(refined_data_set, 'genre') %>%
@@ -112,9 +115,9 @@ count(refined_data_set, 'best_actress_win')%>% format_summary_stats
 count(refined_data_set, 'best_dir_win')%>% format_summary_stats
 
 ```
-and we can clearly see as expected that the count of winers of oscar awards is very low compared to non winners.
+and we can clearly see as expected that the count of wines of Oscar awards is very low compared to non winners.
 
-Now lets plot those counts to get a visual prespective on the distributions:
+Now lets plot those counts to get a visual perspective on the distributions:
 
 ```{r}
 plot_categorical_distribution <- function(data, x_axis_var, fill_color, angle){
@@ -142,7 +145,7 @@ grid.arrange(plot_categorical_distribution(refined_data_set, 'best_actor_win', '
 
 ### 3.2: EDA for continous variables:
 
-lets see some summary statistics for the continous variables
+lets see some summary statistics for the continuous variables
 ```{r}
 refined_data_set %>%
   select(runtime, critics_score, movie_rating) ->
@@ -172,18 +175,18 @@ plot_continous_distributions <- function(data, x_axis, bins){
 plot_continous_distributions(refined_data_set, "runtime", 30)
 ```
 
-we can see that the distribution of runtime accross movies in the dataset is fairly normal with a little right skew, the peak is at nearly 100 which is expect since most movies produced in holywood are around 100 to 120 minutes long.
+we can see that the distribution of run-time across movies in the data-set is fairly normal with a little right skew, the peak is at nearly 100 which is expect since most movies produced in Hollywood are around 100 to 120 minutes long.
 
 ```{r}
 plot_continous_distributions(refined_data_set, "critics_score", 12)
 ```
 
-The distribution of critics score is not normal it has two peaks one near 100 and the other near 40 min which suggests that most of the movies in the dataset are rated somewhere arount 100 if they're they recieve good critics, and around 40 if they're not recieved as well.
+The distribution of critics score is not normal it has two peaks one near 100 and the other near 40 min which suggests that most of the movies in the data-set are rated somewhere around 100 if they're they receive good critics, and around 40 if they're not received as well.
 
 ```{r}
 plot_continous_distributions(refined_data_set, "movie_rating", 12)
 ```
-for the movie rating we calculated we can see that it too is not following a normal distribution, also it has to prominent peaks one near 7.5 and the other 5.4 which suggests that users on imdb and rotten tommatoes tend to give movies 7.5 for movies that they think are good and tend to rate movies that they not preceive as so good with 5.4, if we take into account that the scale is 10 then we can say that users on both sites gave our movies above average rating for the most part.
+for the movie rating we calculated we can see that it too is not following a normal distribution, also it has to prominent peaks one near 7.5 and the other 5.4 which suggests that users on IMDb and rotten tomatoes tend to give movies 7.5 for movies that they think are good and tend to rate movies that they not perceive as so good with 5.4, if we take into account that the scale is 10 then we can say that users on both sites gave our movies above average rating for the most part.
 
 * * *
 
@@ -198,7 +201,7 @@ First let's check for the conditions for MLR:
 ```{r}
 ggpairs(continous_vars)
 ```
-we can see that there is **NO linear relashionship between critics_score and runtim**e which are our continous explanatory variables here also the correlation coefficient is 0.17 which is low, so there is **NO colinearity between explanatory variables**.
+we can see that there is **NO linear relashionship between critics_score and runtim**e which are our continuous explanatory variables here also the correlation coefficient is 0.17 which is low, so there is **NO colinearity between explanatory variables**.
 
 Lets build the linear model:
 ```{r}
@@ -206,7 +209,7 @@ Lets build the linear model:
 full_mlr_model <- lm(movie_rating~., data=refined_data_set)
 ```
 
-Let's look at the resudiuals in respect ot each numeric variable:
+Let's look at the residuals in respect to each numeric variable:
 
 
 ```{r}
@@ -226,7 +229,7 @@ grid.arrange(runtime_resid_plot, critics_score_resid_plot, ncol=1)
 
 ```
 
-both residuals plots show random scatter around zero so we can say that there is a linear relashionship between our numeric explanatory variables and the response variable.
+both residuals plots show random scatter around zero so we can say that there is a linear relationship between our numeric explanatory variables and the response variable.
 
 
 #### 4.1.2 Nearly normal residuals with mean 0:
@@ -245,7 +248,7 @@ residual_qq_plot<- ggplot(data=full_mlr_model, aes(sample=.resid))+
 grid.arrange(residual_distribution, residual_qq_plot, ncol=2)
 ```
 
-We can confidetly state that the residuals are fairly normaly distributed around the mean 0.
+We can confidently state that the residuals are fairly normal distributed around the mean 0.
 
 #### 4.1.3 Constant variability of residuals:
 
@@ -259,12 +262,12 @@ ggplot(full_mlr_model, aes(x = .fitted, y =  .resid) ) +
   labs(x="Predicted", y="Residual") 
 ```
 
-We can see that the variabilty of residuals stays around the same value and the scatter stays random while the predicted value increase, so the condition here is met.
+We can see that the variability of residuals stays around the same value and the scatter stays random while the predicted value increase, so the condition here is met.
 
 
 #### 4.1.4 Independant Residuals:
 
-The movies were **randomly**, and movie rate data isn't a time series type of data, so we can safely say that the Indepent Residuals condition is met as well.
+The movies were **randomly**, and movie rate data isn't a time series type of data, so we can safely say that the Independent Residuals condition is met as well.
 
 **Conclusion:** we can see that all the conditions for an MLR model are met here, so we can be very confident that we want be getting any biases in our predictions.
 
@@ -311,7 +314,7 @@ mlr_model_without_dir <-
   tidy(mlr_model_without_dir) %>% format_regression_summary
 ```
 
-we can see that the R-squared stayed the same while the Adjusted R-squared improved (which expected since we droped one predictor)
+we can see that the R-squared stayed the same while the Adjusted R-squared improved (which expected since we dropped one predictor)
 
 
 #### 4.2.2 Second iteration:
@@ -372,10 +375,10 @@ $$
 if a variable has a subscript, that mean if the variable equals to the specified category in the subscript we will put a 1 in the value of the variable there and 0 else where for the entire variable levels.
 
 
-we will just pick there values to interpret, one level of the genre variable and the two continous variables runtime and critics_score:
+we will just pick there values to interpret, one level of the genre variable and the two continuous variables run-time and critics_score:
 
-* all else held constant, if the genre of a movie is a documentary, we expect to observe on average an aditional 0.76 in its score.
-* all else held constant, for every minute added to the runtime of movie we expect to see, on average, a 0.007 increase in the movie rating
+* all else held constant, if the genre of a movie is a documentary, we expect to observe on average an additional 0.76 in its score.
+* all else held constant, for every minute added to the run-time of movie we expect to see, on average, a 0.007 increase in the movie rating
 * all else held constant, for every point that critics add to the rating of a movie we are expected to see, on average, a 0.03 increase in its rating.
 
 **Conclusion:** 
@@ -387,7 +390,7 @@ for the *association* between:
 * best_actor_win, 
 * best_actress_win, 
 * best_dir_win, 
-* runtime
+* run-time
 
 and:
 
@@ -397,9 +400,9 @@ the data we have, suggests that for regression the following variable are the mo
 
 * critics_score, 
 * genre,
-* runtime
+* run-time
 
-So we can state that there is *NO association*, in a regression setting, between getting a good movie rating and hiring a lot of oscar winners: actors, actress nor directors.
+So we can state that there is *NO association*, in a regression setting, between getting a good movie rating and hiring a lot of Oscar winners: actors, actress nor directors.
 
 * * *
 
@@ -412,13 +415,13 @@ We will run our predictions on the popular animation movie: **Finding Dory** dir
 ```{r}
 any(movies$title == " Finding Dory")
 ```
-So this movie isn't present in the dataset.
+So this movie isn't present in the data-set.
 
-I gathered the information from Rotten Tomatoes and imdb, this is the data we need, the expalanatory variables:
+I gathered the information from Rotten Tomatoes and IMDb, this is the data we need, the explanatory variables:
 
 * critics_score: 94%
 * genre: Animation
-* runtime: 100min
+* run-time: 100min
 
 to compute the response variable movie_rating we need:
 
@@ -491,9 +494,9 @@ To answer our original research question, we can say that from all the variables
 * best_actor_win, 
 * best_actress_win, 
 * best_dir_win, 
-* runtime,
+* run-time,
 
-We can use critics_score, genre and runtime to build a multiple linear regression model with all those variables being significant predictor of the how the audience will rate a 2016 movie.
+We can use critics_score, genre and run-time to build a multiple linear regression model with all those variables being significant predictor of the how the audience will rate a 2016 movie.
 
 as for the problems with this analysis:
 

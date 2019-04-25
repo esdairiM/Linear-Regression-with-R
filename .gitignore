@@ -1,4 +1,5 @@
 .DS_Store
 .Rhistory
 *.Rdata
+*.log
 /reg_model_project_files
