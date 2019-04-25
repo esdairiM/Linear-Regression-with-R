@@ -1,0 +1,503 @@
+---
+title: "Modeling and prediction for movies"
+author: "Mohamed ESDAIRI"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(GGally)
+library(gridExtra)
+library(knitr)
+library(plyr)
+library(kableExtra)
+library(broom)
+```
+
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+The data set is comprised of 651 **randomly** sampled movies produced and released before 2016, as there is No mention to any kind of experimentation protocol or decision into a treatment and control group, so this is an **observational study** so all the results in this project are **associations** by nature and we can't draw any **causation** conclusions.
+Since random sampling was used, we can **generalize** the association results drawn from this analysis to all the movies produced and released before 2016, this actually the reservation that we have, since all the movies in the data-set are Before 2016, can we generalize to all movies, or are me just limited to movies before 2016, since we want to be very cautious about theses things, we will just say that we can generalize to Before 2016 movies.
+
+* * *
+
+
+```{r}
+dim(movies)
+```
+
+
+## Part 2: Research question
+
+How can we describe the **association** of following variables:
+
+* critics_score, 
+* genre, 
+* best_actor_win, 
+* best_actress_win, 
+* best_dir_win, 
+* runtime,
+
+with how the audience will react to a movie? 
+
+can we fit a regression model with all or a subset of those variables to accurately describe this association?
+
+this is a very instersting question to answer since we can predict how good is a movie well ahead of time.
+
+* * *
+
+## Part 3: Exploratory data analysis
+First lets extract all the variables of interest from the data-set:
+how well the audience is reacting to a movie will be calcualte as the average between IMDB ratting and Rotten Tomtoes score after rescaling the variables.
+
+```{r}
+movies %>%
+select(genre, runtime, critics_score, imdb_rating,  audience_score, best_actor_win, best_actress_win, best_dir_win) %>%
+na.omit() %>%
+mutate(movie_rating= (audience_score/20)+(imdb_rating/2)) %>%
+select(-c(audience_score, imdb_rating)) ->
+refined_data_set
+
+str(refined_data_set)
+```
+### 3.1: EDA for categroical variables:
+
+Lets look at the distribution of observations accross categrorical variables:
+we will begin by looking at counts:
+```{r}
+count(refined_data_set, 'genre') %>%
+  kable() %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left" )
+
+```
+we can see here that the highest counts are for Drama, followed by comedy
+
+
+```{r}
+format_summary_stats <- function(.data){
+   kable(.data) %>%
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "left" )
+}
+```
+
+
+```{r}
+count(refined_data_set, 'best_actor_win')%>% format_summary_stats
+ 
+
+```
+```{r}
+count(refined_data_set, 'best_actress_win')%>% format_summary_stats
+```
+
+```{r}
+count(refined_data_set, 'best_dir_win')%>% format_summary_stats
+
+```
+and we can clearly see as expected that the count of winers of oscar awards is very low compared to non winners.
+
+Now lets plot those counts to get a visual prespective on the distributions:
+
+```{r}
+plot_categorical_distribution <- function(data, x_axis_var, fill_color, angle){
+  ggplot(data) +
+  geom_bar( aes(x=get(x_axis_var), y=..count..), fill=fill_color) +
+  labs(x=x_axis_var, y='movie count') +
+  theme_linedraw() +
+  theme(axis.text.x = element_text(angle = angle, hjust = 1)) 
+}
+```
+```{r}
+plot_categorical_distribution(refined_data_set, 'genre', 'lightcoral', 45)
+```
+
+
+```{r}
+layout <- rbind(c(1,2,3))
+
+grid.arrange(plot_categorical_distribution(refined_data_set, 'best_actor_win', 'cyan3', 45),
+             plot_categorical_distribution(refined_data_set, 'best_dir_win', 'orange', 45),
+             plot_categorical_distribution(refined_data_set, 'best_actress_win', 'purple', 45),
+             layout_matrix= layout)
+
+```
+
+### 3.2: EDA for continous variables:
+
+lets see some summary statistics for the continous variables
+```{r}
+refined_data_set %>%
+  select(runtime, critics_score, movie_rating) ->
+  continous_vars
+summary_res <- t(do.call(cbind, lapply(continous_vars, summary)))
+```
+
+
+```{r}
+summary_res %>% format_summary_stats
+```
+
+
+
+
+
+```{r}
+plot_continous_distributions <- function(data, x_axis, bins){
+ ggplot(data, aes(x=get(x_axis))) + 
+    geom_histogram(aes(y=..density..),colour="black", fill="cyan3", bins = bins) +
+    geom_density(alpha=.4, fill="#FF6666") +
+    labs(x=x_axis)
+}
+```
+
+```{r}
+plot_continous_distributions(refined_data_set, "runtime", 30)
+```
+
+we can see that the distribution of runtime accross movies in the dataset is fairly normal with a little right skew, the peak is at nearly 100 which is expect since most movies produced in holywood are around 100 to 120 minutes long.
+
+```{r}
+plot_continous_distributions(refined_data_set, "critics_score", 12)
+```
+
+The distribution of critics score is not normal it has two peaks one near 100 and the other near 40 min which suggests that most of the movies in the dataset are rated somewhere arount 100 if they're they recieve good critics, and around 40 if they're not recieved as well.
+
+```{r}
+plot_continous_distributions(refined_data_set, "movie_rating", 12)
+```
+for the movie rating we calculated we can see that it too is not following a normal distribution, also it has to prominent peaks one near 7.5 and the other 5.4 which suggests that users on imdb and rotten tommatoes tend to give movies 7.5 for movies that they think are good and tend to rate movies that they not preceive as so good with 5.4, if we take into account that the scale is 10 then we can say that users on both sites gave our movies above average rating for the most part.
+
+* * *
+
+## Part 4: Modeling
+
+First let's check for the conditions for MLR: 
+
+### 4.1 Model diagnostics:
+
+#### 4.1.1 Linear relashionship between explanatory and response variables:
+
+```{r}
+ggpairs(continous_vars)
+```
+we can see that there is **NO linear relashionship between critics_score and runtim**e which are our continous explanatory variables here also the correlation coefficient is 0.17 which is low, so there is **NO colinearity between explanatory variables**.
+
+Lets build the linear model:
+```{r}
+
+full_mlr_model <- lm(movie_rating~., data=refined_data_set)
+```
+
+Let's look at the resudiuals in respect ot each numeric variable:
+
+
+```{r}
+runtime_resid_plot<-
+  ggplot(data=full_mlr_model, aes(x=refined_data_set$runtime, y=.resid))+ 
+  geom_point(color = "darkslategray4") +
+  geom_hline(yintercept = 0) +
+  labs(x="Runtime", y="Residuals")
+
+critics_score_resid_plot <- 
+  ggplot(data=full_mlr_model, aes(x=refined_data_set$critics_score, y=.resid))+ 
+  geom_point(color = "darkslategray4") +
+  geom_hline(yintercept = 0) +
+  labs(x="Critics score", y="Residuals")
+
+grid.arrange(runtime_resid_plot, critics_score_resid_plot, ncol=1)
+
+```
+
+both residuals plots show random scatter around zero so we can say that there is a linear relashionship between our numeric explanatory variables and the response variable.
+
+
+#### 4.1.2 Nearly normal residuals with mean 0:
+
+
+Lets plot the distribution and 
+
+```{r}
+residual_distribution <- ggplot(data=full_mlr_model, aes(x=.resid))+ 
+  geom_histogram(color="black",fill = "deepskyblue4")
+
+residual_qq_plot<- ggplot(data=full_mlr_model, aes(sample=.resid))+
+  geom_qq(color = "deepskyblue4") +
+  geom_qq_line()
+
+grid.arrange(residual_distribution, residual_qq_plot, ncol=2)
+```
+
+We can confidetly state that the residuals are fairly normaly distributed around the mean 0.
+
+#### 4.1.3 Constant variability of residuals:
+
+Let's plot the residuals vs the predicted values to account for the model as a whole:
+
+```{r}
+
+ggplot(full_mlr_model, aes(x = .fitted, y =  .resid) ) + 
+  geom_point(color = "deepskyblue4") +
+  geom_hline(yintercept = 0) + 
+  labs(x="Predicted", y="Residual") 
+```
+
+We can see that the variabilty of residuals stays around the same value and the scatter stays random while the predicted value increase, so the condition here is met.
+
+
+#### 4.1.4 Independant Residuals:
+
+The movies were **randomly**, and movie rate data isn't a time series type of data, so we can safely say that the Indepent Residuals condition is met as well.
+
+**Conclusion:** we can see that all the conditions for an MLR model are met here, so we can be very confident that we want be getting any biases in our predictions.
+
+### 4.2 Model Selection:
+
+Let's look at the model's summary so we can see what we are working with here:
+
+```{r}
+summary(full_mlr_model)
+```
+
+the p-value associated with the F-statistic for the whole model suggests that there is at least one slope that is not zero which means that there is an explanatory variable that can be used to construct a linear regression model.
+
+
+**We will be using backward selection with p-value, for two reasons, first we will be sure that all the variables included affect the rating of the movie so we can suggest the most important things to work on for a new movie to receive a good rating, and second this method required fewer iterations so it will be favorable when time is a limited resource which is usually the case.**
+
+#### 4.2.1 First iteration:
+
+Let's see the p-values so we can decide what variables to remove:
+
+```{r}
+format_regression_summary <- function(.data) {
+    kable(.data) %>%
+    kable_styling(bootstrap_options = "striped", full_width = F, position = "left" )  %>%
+    column_spec(2, bold = T, color="white", background = "gray") %>%
+    column_spec(5, bold = T, color="white", background = "#D6576E")
+  }
+```
+
+
+```{r}
+tidy(full_mlr_model) %>% format_regression_summary
+```
+
+
+Let's start by removing the best_dir_win variable since it has the highest p-value
+
+
+```{r}
+mlr_model_without_dir <- 
+  lm(movie_rating~.-best_dir_win, 
+     data=refined_data_set)
+  
+  tidy(mlr_model_without_dir) %>% format_regression_summary
+```
+
+we can see that the R-squared stayed the same while the Adjusted R-squared improved (which expected since we droped one predictor)
+
+
+#### 4.2.2 Second iteration:
+
+now let's drop the best_actress_win variable since it has the highest p-value:
+
+```{r}
+mlr_model_without_dir_actress <- 
+  lm(movie_rating~.-best_dir_win-best_actress_win, 
+     data=refined_data_set)
+  
+  tidy(mlr_model_without_dir_actress) %>% format_regression_summary
+```
+
+
+#### 4.2.3 Third iteration:
+
+now let's drop the best_actor_win variable since it has the highest p-value:
+
+```{r}
+mlr_model_without_dir_actress_actor <- 
+  lm(movie_rating~.-best_dir_win-best_actress_win-best_actor_win, 
+     data=refined_data_set)
+  
+  tidy(mlr_model_without_dir_actress_actor)%>% format_regression_summary
+```
+
+### 4.3 Interpretation of model parameters:
+
+```{r}
+best_model <- mlr_model_without_dir_actress_actor
+
+tidy(best_model)%>%
+  kable() %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left" ) %>%
+  column_spec(2, bold = T, color="white", background = "#D6576E")
+```
+
+the equation of the regression model is:
+
+$$
+\begin{aligned}
+movie\_rating = &3.4162933 + \\ 
+&0.2138432 * genre_{animation} + 
+0.484375892 * genre_{art\_house\_international} + 
+-0.106368569 * genre_{comedy} + \\
+&0.7634200 * genre_{documentary} + 
+0.1413297 * genre_{drama} + 
+-0.5028112 * genre_{horror} + \\
+&0.6625424 * genre_{musical\_performing\_arts} + 
+-0.1631344 * genre_{mystry\_suspense} +
+0.0904674 * genre_{other} + \\
+-&0.5337494 * genre_{scifi\_fantasy} +
+0.0076532 * runtime +
+0.0353340 * critics\_score
+\end{aligned}
+$$
+if a variable has a subscript, that mean if the variable equals to the specified category in the subscript we will put a 1 in the value of the variable there and 0 else where for the entire variable levels.
+
+
+we will just pick there values to interpret, one level of the genre variable and the two continous variables runtime and critics_score:
+
+* all else held constant, if the genre of a movie is a documentary, we expect to observe on average an aditional 0.76 in its score.
+* all else held constant, for every minute added to the runtime of movie we expect to see, on average, a 0.007 increase in the movie rating
+* all else held constant, for every point that critics add to the rating of a movie we are expected to see, on average, a 0.03 increase in its rating.
+
+**Conclusion:** 
+
+for the *association* between:
+
+* critics_score, 
+* genre, 
+* best_actor_win, 
+* best_actress_win, 
+* best_dir_win, 
+* runtime
+
+and:
+
+* movie_rating
+
+the data we have, suggests that for regression the following variable are the most significant ones to decide movie_rating:
+
+* critics_score, 
+* genre,
+* runtime
+
+So we can state that there is *NO association*, in a regression setting, between getting a good movie rating and hiring a lot of oscar winners: actors, actress nor directors.
+
+* * *
+
+## Part 5: Prediction
+
+### 5.1 Predicting movie rating for Finding Dory:
+
+We will run our predictions on the popular animation movie: **Finding Dory** directed by *Andrew Stanton & Angus MacLane*, let's check if the movie is in already in the data-set
+
+```{r}
+any(movies$title == " Finding Dory")
+```
+So this movie isn't present in the dataset.
+
+I gathered the information from Rotten Tomatoes and imdb, this is the data we need, the expalanatory variables:
+
+* critics_score: 94%
+* genre: Animation
+* runtime: 100min
+
+to compute the response variable movie_rating we need:
+
+* IMDB audience rating: 7.3/10
+* RT audience score: 84/100
+
+
+```{r}
+real_movie_rating <- (84/20)+(7.3/2)
+real_movie_rating
+```
+this movie got a 7.85 average rating from audience.
+
+Let's construct the data.frame that we will use to compute the predicted rating:
+
+```{r}
+third_test_movie <- 
+  data.frame("critics_score"=94, 
+             "genre"="Animation", 
+             "runtime"=100, 
+             "best_actor_win"="no", 
+             "best_actress_win"="no", 
+             "best_dir_win"="no")
+```
+*Note:* best_actor_win, best_actress_win, best_dir_win although present here in the input data they don't affect the prediction, they're included for the predict function to work properly.
+
+
+Lets predict the movie_rating using our model:
+```{r}
+predicted_movie_rating <- predict(mlr_model_without_dir_actress_actor, third_test_movie)
+predicted_movie_rating <- as.numeric(predicted_movie_rating)
+predicted_movie_rating
+```
+
+Let's change the value of  best_actor_win, best_actress_win, best_dir_win to see if they'll affect the predicted value:
+```{r}
+third_test_movie_altered <- 
+  data.frame("critics_score"=94, 
+             "genre"="Animation", 
+             "runtime"=100, 
+             "best_actor_win"="yes", 
+             "best_actress_win"="yes", 
+             "best_dir_win"="yes")
+predict(mlr_model_without_dir_actress_actor, third_test_movie_altered)
+```
+so the value stays the same as mentioned in the Note above.
+
+
+Lets compute the difference between the prediction and real value:
+```{r}
+real_movie_rating - predicted_movie_rating
+```
+
+so we missed the real value only with about 0.13 this is a good prediction value, given that we used a simple linear regression model.
+
+Let's compute the confidence interval for this prediction:
+
+```{r}
+predict(mlr_model_without_dir_actress_actor, third_test_movie, interval = "predict", level=0.95)
+```
+the model predicts, with 95% confidence, that "Finding Dory", will get a score between 5.71 and 9.71.
+
+
+## Part 6: Conclusion
+
+To answer our original research question, we can say that from all the variables:
+
+* critics_score, 
+* genre, 
+* best_actor_win, 
+* best_actress_win, 
+* best_dir_win, 
+* runtime,
+
+We can use critics_score, genre and runtime to build a multiple linear regression model with all those variables being significant predictor of the how the audience will rate a 2016 movie.
+
+as for the problems with this analysis:
+
+* we have data limited to 2016, we can extrapolate to all movies
+* we have data from an observational study, we can't get causation conclusions
+* a large confidence interval which suggests that the model has a lot of variance while making a prediction.
+
